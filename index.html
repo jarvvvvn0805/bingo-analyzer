@@ -42,37 +42,82 @@
         </div>
     </div>
 
-    <script>
-        let periods = [];
-        const swiper = new Swiper('#swiper-container', {
-            slidesPerView: 'auto',
-            spaceBetween: 10,
-            navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
-            breakpoints: { 768: { slidesPerView: 3 } }
-        });
+<script>
+    let periods = [];
+    const swiper = new Swiper('#swiper-container', {
+        slidesPerView: 'auto',
+        spaceBetween: 10,
+        navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+        breakpoints: { 768: { slidesPerView: 3 } }
+    });
 
-        async function fetchData() {
+    async function fetchData() {
+        const proxyUrls = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    ''  // 直接 fetch 若網站允許
+];
+
+        const urls = [
+            encodeURIComponent('https://lotto.auzonet.com/bingobingoV1.php'),  // 穩定版
+            encodeURIComponent('https://lotto.auzo.tw/bingobingo.php')
+        ];
+        
+        for(let url of urls) {
             try {
-                const resp = await fetch('https://lotto.auzo.tw/bingobingo.php');
+                const resp = await fetch(proxy + url);
                 const html = await resp.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-                
-                // 解析頁面文字，匹配期數+號碼 (依網站格式調整) [web:1]
                 const text = doc.body.textContent;
+                
+                // 正確 regex (無多餘反斜線)
                 const matches = [...text.matchAll(/(\d{9})\s+([\d\s]{40,})/g)];
-                const today = new Date().toISOString().slice(5,10).replace('-','');
-                
-                periods = matches
-                    .map(m => ({ period: m[1], numbers: m[2].trim().split(/\s+/).map(Number).slice(0,20) }))
-                    .filter(p => p.period.includes(today))
-                    .slice(0,20);  // 當天最近20期
-                
-                updateUI();
+                if(matches.length) {
+                    const today = new Date().toISOString().slice(5,10).replace('-','');
+                    periods = matches
+                        .map(m => ({ 
+                            period: m[1], 
+                            numbers: m[2].trim().split(/\s+/).map(Number).filter(n => n > 0).slice(0,20) 
+                        }))
+                        .filter(p => p.numbers.length === 20 && p.period.includes(today))
+                        .slice(0,20);
+                    
+                    if(periods.length) {
+                        updateUI();
+                        return;
+                    }
+                }
             } catch(e) {
-                alert('抓取失敗，請檢查網路或網站變更');
+                console.log('來源失敗:', e);
             }
         }
+        document.getElementById('current-period').innerText = '暫無當天資料，5分後重試';
+    }
+
+    function updateUI() {
+        if (!periods.length) return;
+        
+        const cur = periods[0];
+        document.getElementById('current-period').innerHTML = 
+            `第 ${cur.period} 期 <br> ${cur.numbers.map(n => `<span class="ball">${n}</span>`).join('')}`;
+        
+        const wrapper = document.getElementById('periods-wrapper');
+        wrapper.innerHTML = periods.map(p => 
+            `<div class="swiper-slide text-center p-2 bg-light rounded">
+                <div class="fw-bold">${p.period}</div>
+                <div class="small">${p.numbers.slice(0,5).join(' ')}...</div>
+            </div>`
+        ).join('');
+        swiper.update();
+        updateStats();  // 記得呼叫統計
+    }
+
+    // ... (updateStats, simulate 等函數保持原樣，從之前完整碼複製)
+
+    fetchData();
+    setInterval(fetchData, 300000);  // 每5分鐘
+</script>
 
         function updateUI() {
             if (!periods.length) return;
